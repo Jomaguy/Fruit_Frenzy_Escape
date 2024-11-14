@@ -6,181 +6,233 @@
 //
 //
 import SpriteKit
-class GameScene: SKScene, SKPhysicsContactDelegate {
-    // Your existing properties remain
-    var player: SKSpriteNode!
-    var platforms: [SKSpriteNode] = [] // Change to an array of platforms
-    var holes: [SKShapeNode] = [] // Change to an array of holes
+
+class GameScene: SKScene {
+
+    // Add this line
+    var player: Player!
+    var chaseLine: ChaseLine!
+    var platformManager: PlatformManager! // Add this line
+    var obstacleManager: ObstacleManager!
     
-    // Add player movement properties
-    var playerSpeed: CGFloat = 5.0
-    var playerMovementDirection: CGFloat = 0.0
-    
-    // Define collision categories
-    let playerCategory: UInt32 = 0x1 << 0
-    let platformCategory: UInt32 = 0x1 << 1
-    let holeCategory: UInt32 = 0x1 << 2
-    
-    // Add properties for platform generation
-    let platformHeight: CGFloat = 20
-    let platformGap: CGFloat = 200
-    
-    // Add this property to track the camera
+  
+    // Other properties remain the same
+    var timeElapsed: TimeInterval = 0
+    var lastTapTime: TimeInterval = 0
+    let doubleTapInterval: TimeInterval = 0.3
     var gameCamera: SKCameraNode!
-    
-    // Add this property to track if the player is falling through a hole
-    var isFallingThroughHole = false
+
+    // Add this property
+    var background: SKSpriteNode!
+
+    // Add this property
+    var speedLabel: SKLabelNode!
+
+    // Add these properties
+    var scoreLabel: SKLabelNode!
+    var score: Int = 0
+    var lastPlatformY: CGFloat = 0
+
+    // Remove this property as we won't need it
+    // var isOnPlatform: Bool = false
+
+    // Add this property to keep track of the highest platform reached
+    var highestPlatformReached: Int = 0
+
+    // Add this property
+    var gameOverHandler: GameOverHandler?
 
     override func didMove(to view: SKView) {
-        // Set up physics world
-        physicsWorld.contactDelegate = self
-        physicsWorld.gravity = CGVector(dx: 0, dy: -9.8)
-        
-        // Set up initial platforms
-        setupInitialPlatforms()
-        
-        // Set up the player
-        setupPlayer()
-        
-        // Add this line to set up the camera
-        setupCamera()
-    }
-    
-    // Add this function to set up the camera
-    func setupCamera() {
+        // Add this line to create the background
+        createBackground()
+
+        // Initialize the camera
         gameCamera = SKCameraNode()
-        gameCamera.position = CGPoint(x: frame.midX, y: frame.midY)
-        addChild(gameCamera)
         camera = gameCamera
+        addChild(gameCamera)
+        
+        // Initialize PlatformManager
+        platformManager = PlatformManager(scene: self)
+        obstacleManager = ObstacleManager(scene: self)
+        
+        // Initial platform setup with consistent spacing
+        platformManager.spawnInitialPlatforms(startY: frame.height * 0.3)
+        
+        createPlayer()
+        createScreenBoundaries()
+        createChaseLine()
+        
+        // Add this line to create the speed label
+        createSpeedLabel()
+        
+        // Add this line to create the score label
+        createScoreLabel()
+
+        // Set the initial lastPlatformY
+        lastPlatformY = frame.height * 0.4 + 10 + 10 // Same as initial player position
+        
+        // Initialize the GameOverHandler
+        gameOverHandler = GameOverHandler(scene: self, score: 0)
     }
-    
-    // Modify this function to set up initial platforms lower on the screen
-    func setupInitialPlatforms() {
-        let numberOfPlatforms = Int(frame.height / platformGap) + 1
-        
-        for i in 0..<numberOfPlatforms {
-            // Change 0.3 to 0.2 to start platforms even lower
-            let platformY = frame.height * 0.2 - CGFloat(i) * platformGap
-            createPlatform(at: CGPoint(x: frame.midX, y: platformY))
-        }
+
+    func createPlayer() {
+        let playerPosition = CGPoint(x: frame.midX, y: frame.height * 0.4 + 10 + 10)
+        player = Player(position: playerPosition)
+        addChild(player.node)
     }
-    
-    // Modify this function to create a platform with a hole
-    func createPlatform(at position: CGPoint) {
-        let platform = SKSpriteNode(color: .gray, size: CGSize(width: frame.width, height: platformHeight))
-        platform.position = position
+
+    func createScreenBoundaries() {
+        let leftBoundary = SKNode()
+        leftBoundary.position = CGPoint(x: 0, y: frame.midY)
+        leftBoundary.physicsBody = SKPhysicsBody(rectangleOf: CGSize(width: 1, height: frame.height))
+        leftBoundary.physicsBody?.isDynamic = false
+        addChild(leftBoundary)
         
-        // Add physics body to the platform
-        platform.physicsBody = SKPhysicsBody(rectangleOf: platform.size)
-        platform.physicsBody?.isDynamic = false
-        platform.physicsBody?.categoryBitMask = platformCategory
-        
-        addChild(platform)
-        platforms.append(platform)
-        
-        // Create a hole in the platform
-        createHole(in: platform)
+        let rightBoundary = SKNode()
+        rightBoundary.position = CGPoint(x: frame.width, y: frame.midY)
+        rightBoundary.physicsBody = SKPhysicsBody(rectangleOf: CGSize(width: 1, height: frame.height))
+        rightBoundary.physicsBody?.isDynamic = false
+        addChild(rightBoundary)
     }
-    
-    // Modify this function to create a hole in the given platform
-    func createHole(in platform: SKSpriteNode) {
-        let holeWidth: CGFloat = 60
-        let holePosition = CGPoint(x: CGFloat.random(in: holeWidth/2...frame.width - holeWidth/2), y: platform.position.y)
-        
-        let hole = SKShapeNode(rectOf: CGSize(width: holeWidth, height: platformHeight))
-        hole.fillColor = .black
-        hole.strokeColor = .clear
-        hole.position = holePosition
-        
-        // Add physics body to the hole
-        hole.physicsBody = SKPhysicsBody(rectangleOf: hole.frame.size)
-        hole.physicsBody?.isDynamic = false
-        hole.physicsBody?.categoryBitMask = holeCategory
-        
-        addChild(hole)
-        holes.append(hole)
+
+    func createChaseLine() {
+        // Replace the content of this function with:
+        let startPosition = CGPoint(x: frame.midX, y: frame.height * 0.6)
+        chaseLine = ChaseLine(width: frame.width, startPosition: startPosition, initialSpeed: 100)
+        addChild(chaseLine.node)
     }
-    
-    func setupPlayer() {
-        player = SKSpriteNode(color: .red, size: CGSize(width: 15, height: 15))
-        // Change 0.3 to 0.2 to start the player lower
-        player.position = CGPoint(x: frame.midX, y: frame.height * 0.2 + platformHeight / 2 + player.size.height / 2)
-        
-        player.physicsBody = SKPhysicsBody(rectangleOf: player.size)
-        player.physicsBody?.categoryBitMask = playerCategory
-        player.physicsBody?.collisionBitMask = platformCategory
-        player.physicsBody?.contactTestBitMask = holeCategory
-        
-        addChild(player)
+
+    // Add this function to create the background
+    func createBackground() {
+        background = SKSpriteNode(imageNamed: "fridgeBackground")
+        background.size = self.size
+        background.position = CGPoint(x: frame.midX, y: frame.midY)
+        background.zPosition = -1 // Ensure the background is behind other nodes
+        addChild(background)
     }
-    
+
+    // Add this function to create the speed label
+    func createSpeedLabel() {
+        speedLabel = SKLabelNode(fontNamed: "Arial")
+        speedLabel.fontSize = 16
+        speedLabel.fontColor = .white
+        speedLabel.position = CGPoint(x: 20, y: frame.height - 60) // Adjusted y-position
+        speedLabel.horizontalAlignmentMode = .left
+        speedLabel.zPosition = 100 // Ensure it's above other elements
+        addChild(speedLabel)
+    }
+
+    // Add this function to create the score label
+    func createScoreLabel() {
+        scoreLabel = SKLabelNode(fontNamed: "Arial")
+        scoreLabel.fontSize = 16
+        scoreLabel.fontColor = .white
+        scoreLabel.position = CGPoint(x: frame.width - 20, y: frame.height - 60)
+        scoreLabel.horizontalAlignmentMode = .right
+        scoreLabel.zPosition = 100 // Ensure it's above other elements
+        scoreLabel.text = "Score: 0"
+        addChild(scoreLabel)
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        handleTouches(touches)
-    }
-    
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        playerMovementDirection = 0.0
-    }
-    
-    func handleTouches(_ touches: Set<UITouch>) {
         guard let touch = touches.first else { return }
+        let currentTime = touch.timestamp
         let touchLocation = touch.location(in: self)
-        
-        if touchLocation.x < frame.midX {
-            playerMovementDirection = -1.0 // Move left
+
+        if currentTime - lastTapTime < doubleTapInterval {
+            player.jump()
         } else {
-            playerMovementDirection = 1.0 // Move right
+            player.movementDirection = touchLocation.x < frame.midX ? -1 : 1
         }
+
+        lastTapTime = currentTime
     }
-    
-    // Modify the update function to adjust the camera position
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        player.stopMoving()
+    }
+
     override func update(_ currentTime: TimeInterval) {
-        movePlayer()
-        checkAndGenerateNewPlatforms()
-        
-        // Update camera position to follow the player
-        // Change frame.height / 4 to frame.height / 5 to keep more of the lower part of the screen visible
-        let targetY = player.position.y - frame.height / 5
-        let cameraY = gameCamera.position.y
-        let newY = cameraY + (targetY - cameraY) * 0.1 // Smooth camera movement
-        gameCamera.position = CGPoint(x: frame.midX, y: newY)
-    }
-    
-    func movePlayer() {
-        let newX = player.position.x + (playerSpeed * playerMovementDirection)
-        player.position.x = max(player.size.width / 2, min(newX, frame.width - player.size.width / 2))
-    }
-    
-    func checkAndGenerateNewPlatforms() {
-        guard let lowestPlatform = platforms.min(by: { $0.position.y < $1.position.y }) else { return }
-        
-        if player.position.y < lowestPlatform.position.y + frame.height / 2 {
-            createPlatform(at: CGPoint(x: frame.midX, y: lowestPlatform.position.y - platformGap))
+        // Move the camera to follow the player's vertical position
+        gameCamera.position = CGPoint(x: frame.midX, y: player.node.position.y)
+
+        // Update the chase line
+        chaseLine.update(currentTime: currentTime, playerPosition: player.node.position)
+
+
+        // Check if the chase line has reached the player
+        if chaseLine.hasCaughtPlayer(playerPosition: player.node.position) {
+            gameOver()
         }
-        
-        // Remove platforms that are above the screen
-        platforms = platforms.filter { $0.position.y < frame.height + platformHeight }
-        holes = holes.filter { $0.position.y < frame.height + platformHeight }
-    }
-    
-    func didBegin(_ contact: SKPhysicsContact) {
-        let collision = contact.bodyA.categoryBitMask | contact.bodyB.categoryBitMask
-        
-        if collision == playerCategory | holeCategory {
-            // Player has entered a hole
-            if !isFallingThroughHole {
-                isFallingThroughHole = true
-                player.physicsBody?.collisionBitMask &= ~platformCategory
-                
-                // Reset falling state and collision after a longer delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                    self?.isFallingThroughHole = false
-                    self?.player.physicsBody?.collisionBitMask |= self?.platformCategory ?? 0
-                }
-            }
-        } else if collision == playerCategory | platformCategory && !isFallingThroughHole {
-            // Player has landed on a platform
-            player.physicsBody?.collisionBitMask |= platformCategory
+
+        // Move the player horizontally based on the movement direction
+        player.move(in: frame)
+
+        // Spawn new platforms based on the camera's position to prevent gaps
+        if platformManager.lastPlatformY > gameCamera.position.y - frame.height {
+            platformManager.lastPlatformY -= platformManager.platformSpacing
+            platformManager.spawnPlatform(yPosition: platformManager.lastPlatformY)
         }
+
+        // Remove platforms that are off the top of the screen
+        platformManager.cleanupPlatforms(playerY: player.node.position.y, screenHeight: frame.height)
+
+        // Add this line to update the background position
+        background.position = CGPoint(x: frame.midX, y: gameCamera.position.y)
+
+        // Update the speed label
+        updateSpeedLabel()
+
+        // Update the score label
+        updateScoreLabel()
+
+        // Add this line to check for new platform
+        checkNewPlatform()
+
+        // Check if player has reached a new platform
+        
+    }
+
+    // Add this function to update the speed label
+    func updateSpeedLabel() {
+        let speed = Int(chaseLine.speed)
+        speedLabel.text = "Speed: \(speed)"
+        
+        // Update the label's position relative to the camera
+        speedLabel.position = CGPoint(x: gameCamera.position.x - frame.width / 2 + 20,
+                                      y: gameCamera.position.y + frame.height / 2 - 60) // Adjusted y-position
+    }
+
+    // Add this function to update the score label
+    func updateScoreLabel() {
+        scoreLabel.text = "Score: \(score)"
+        
+        // Update the label's position relative to the camera
+        scoreLabel.position = CGPoint(x: gameCamera.position.x + frame.width / 2 - 20,
+                                      y: gameCamera.position.y + frame.height / 2 - 60)
+    }
+
+    // Modify the checkNewPlatform function
+    func checkNewPlatform() {
+        let playerY = player.node.position.y
+        let currentPlatformIndex = Int((playerY - frame.height * 0.3) / platformManager.platformSpacing)
+        
+        if currentPlatformIndex > highestPlatformReached {
+            highestPlatformReached = currentPlatformIndex
+            score = highestPlatformReached
+            // Add this line to update the score label immediately
+            updateScoreLabel()
+        }
+    }
+
+    func gameOver() {
+        // Remove this line
+        // self.isPaused = true // Pauses the game scene
+
+        // Update the score in the GameOverHandler
+        gameOverHandler?.score = score
+
+        // Call the handleGameOver method
+        gameOverHandler?.handleGameOver()
     }
 }
