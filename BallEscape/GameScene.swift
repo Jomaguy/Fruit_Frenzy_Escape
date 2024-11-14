@@ -1,3 +1,10 @@
+//
+//  GameScene.swift
+//  BallEscape
+//
+//  Created by Jonathan Mahrt Guyou on 11/12/24.
+//
+//
 import SpriteKit
 
 class GameScene: SKScene {
